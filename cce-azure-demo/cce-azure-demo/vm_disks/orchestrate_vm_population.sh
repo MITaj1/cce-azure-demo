@@ -92,7 +92,7 @@ CORRECT_DEVICE="${DATA_DISK_LUN0}-part1"
 if mountpoint -q __MOUNT__; then
     CURRENT_SOURCE="$(findmnt -n -o SOURCE --target __MOUNT__ 2>/dev/null || true)"
     RESOLVED_CORRECT="$(readlink -f "$CORRECT_DEVICE" 2>/dev/null || true)"
-    if [[ "$CURRENT_SOURCE" != "$RESOLVED_CORRECT" ]]; then
+        if [ "$CURRENT_SOURCE" != "$RESOLVED_CORRECT" ]; then
         echo "WARNING: __MOUNT__ is mounted from $CURRENT_SOURCE, not the real data disk ($RESOLVED_CORRECT) - unmounting the wrong device"
         sudo umount __MOUNT__
     fi
