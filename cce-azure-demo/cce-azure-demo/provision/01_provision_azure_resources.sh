@@ -109,6 +109,7 @@ for vm_name in "${!VM_DOMAINS[@]}"; do
         --size "$size" \
         --vnet-name "$VNET_NAME" --subnet "$SUBNET_NAME" \
         --nsg "$NSG_NAME" \
+        --public-ip-address "" \
         --admin-username "$ADMIN_USERNAME" \
         --generate-ssh-keys \
         --data-disk-sizes-gb "$DATA_DISK_GB" \
