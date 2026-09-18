@@ -87,18 +87,29 @@ __SCRIPT_CONTENT__
 SCRIPT_EOF
 
 DATA_DISK_LUN0=/dev/disk/azure/scsi1/lun0
+CORRECT_DEVICE="${DATA_DISK_LUN0}-part1"
+
+if mountpoint -q __MOUNT__; then
+    CURRENT_SOURCE="$(findmnt -n -o SOURCE --target __MOUNT__ 2>/dev/null || true)"
+    RESOLVED_CORRECT="$(readlink -f "$CORRECT_DEVICE" 2>/dev/null || true)"
+    if [[ "$CURRENT_SOURCE" != "$RESOLVED_CORRECT" ]]; then
+        echo "WARNING: __MOUNT__ is mounted from $CURRENT_SOURCE, not the real data disk ($RESOLVED_CORRECT) - unmounting the wrong device"
+        sudo umount __MOUNT__
+    fi
+fi
+
 if ! mountpoint -q __MOUNT__; then
     sudo mkdir -p __MOUNT__
-    if ! blkid "${DATA_DISK_LUN0}-part1" >/dev/null 2>&1; then
+    if ! blkid "$CORRECT_DEVICE" >/dev/null 2>&1; then
         sudo parted "$DATA_DISK_LUN0" --script mklabel gpt mkpart primary ext4 0% 100%
         sudo partprobe "$DATA_DISK_LUN0" 2>/dev/null || true
         for _ in 1 2 3 4 5; do
-            [ -e "${DATA_DISK_LUN0}-part1" ] && break
+            [ -e "$CORRECT_DEVICE" ] && break
             sleep 1
         done
-        sudo mkfs.ext4 -F "${DATA_DISK_LUN0}-part1"
+        sudo mkfs.ext4 -F "$CORRECT_DEVICE"
     fi
-    sudo mount "${DATA_DISK_LUN0}-part1" __MOUNT__
+    sudo mount "$CORRECT_DEVICE" __MOUNT__
     sudo chmod 777 __MOUNT__
 fi
 
