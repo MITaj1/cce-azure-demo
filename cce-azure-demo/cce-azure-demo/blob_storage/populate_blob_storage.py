@@ -12,17 +12,24 @@ up to the target instead of re-uploading or overshooting. Blob names are
 also checked individually (name + size) before upload so a partially-run
 batch never double-uploads.
 
-Auth: uses DefaultAzureCredential (works with `az login`, a managed identity,
-or environment-variable service principal creds - whichever is already set
-up in your shell/Cloud Shell).
+Auth: two ways to authenticate, pick whichever's already available to you -
+  --account-key or --connection-string: the storage account's access key
+    (Portal: storage account -> Access keys) or full connection string. No
+    login flow, no CLI install, works from any box with no other setup -
+    the simplest option in a locked-down environment with no managed
+    identity and no `az` installed.
+  --account-name alone (no key/conn-str given): falls back to
+    DefaultAzureCredential, which needs a managed identity OR a prior
+    `az login` on this machine. Use this on a box that already has one of
+    those set up.
 
 Usage:
     python3 populate_blob_storage.py \\
-        --account-name cceukbankdemo \\
+        --account-name cceukbankdemo --account-key "<key from Portal>" \\
         --target-tb 1.0
 
-Run from a jump VM or Cloud Shell with `az login` already done, ideally
-inside tmux/screen (see README) since this is a multi-hour upload at 1TB.
+Run from a jump VM or Cloud Shell, ideally inside tmux/screen (see README)
+since this is a multi-hour upload at 1TB.
 """
 
 import argparse
@@ -132,10 +139,29 @@ def populate_container(blob_service: BlobServiceClient, domain: str, target_byte
     print(f"[{domain}] done. Total in container: ~{ub.human_bytes(target_bytes)}")
 
 
-def run(account_name: str, target_bytes: int, credential=None, seed: int = None):
-    rng = random.Random(seed)
+def build_blob_service_client(account_name: str, account_key: str = None, connection_string: str = None):
+    """
+    Three ways in, tried in this order: an explicit connection string, an
+    account name + key (Portal: storage account -> Access keys - the
+    simplest path with no managed identity and no `az login`), or falling
+    back to DefaultAzureCredential (needs one of those already set up).
+    """
+    if connection_string:
+        return BlobServiceClient.from_connection_string(connection_string)
     account_url = f"https://{account_name}.blob.core.windows.net"
-    blob_service = BlobServiceClient(account_url=account_url, credential=credential or DefaultAzureCredential())
+    if account_key:
+        return BlobServiceClient(account_url=account_url, credential=account_key)
+    return BlobServiceClient(account_url=account_url, credential=DefaultAzureCredential())
+
+
+def run(account_name: str, target_bytes: int, credential=None, seed: int = None,
+        account_key: str = None, connection_string: str = None):
+    rng = random.Random(seed)
+    if credential is not None:
+        account_url = f"https://{account_name}.blob.core.windows.net"
+        blob_service = BlobServiceClient(account_url=account_url, credential=credential)
+    else:
+        blob_service = build_blob_service_client(account_name, account_key, connection_string)
 
     per_domain_target = target_bytes // len(ub.BUSINESS_DOMAINS)
     for domain in ub.BUSINESS_DOMAINS:
@@ -145,12 +171,18 @@ def run(account_name: str, target_bytes: int, credential=None, seed: int = None)
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--account-name", required=True, help="Azure Storage account name (no domain suffix)")
+    ap.add_argument("--account-key", default=None,
+                     help="Storage account access key (Portal: storage account -> Access keys). "
+                          "Simplest auth path with no managed identity and no az login available.")
+    ap.add_argument("--connection-string", default=None,
+                     help="Full storage connection string, as an alternative to --account-key.")
     ap.add_argument("--target-tb", type=float, default=1.0, help="Total target size across all containers, in TB")
     ap.add_argument("--seed", type=int, default=None)
     args = ap.parse_args()
 
     target_bytes = int(args.target_tb * 1024 * 1024 * 1024 * 1024)
-    run(args.account_name, target_bytes, seed=args.seed)
+    run(args.account_name, target_bytes, seed=args.seed,
+        account_key=args.account_key, connection_string=args.connection_string)
 
 
 if __name__ == "__main__":
