@@ -86,21 +86,19 @@ cat > /opt/cce-demo/vm_disks/generate_vm_data.py <<'SCRIPT_EOF'
 __SCRIPT_CONTENT__
 SCRIPT_EOF
 
-# Ensure the data disk is mounted before we try to fill it - if it's a
-# freshly-attached raw disk, format+mount it (idempotent: skips if already
-# mounted/formatted). Adjust /dev/sdc if your LUN differs.
+DATA_DISK_LUN0=/dev/disk/azure/scsi1/lun0
 if ! mountpoint -q __MOUNT__; then
     sudo mkdir -p __MOUNT__
-    if ! blkid /dev/sdc1 >/dev/null 2>&1; then
-        sudo parted /dev/sdc --script mklabel gpt mkpart primary ext4 0% 100%
-        sudo partprobe /dev/sdc 2>/dev/null || true
+    if ! blkid "${DATA_DISK_LUN0}-part1" >/dev/null 2>&1; then
+        sudo parted "$DATA_DISK_LUN0" --script mklabel gpt mkpart primary ext4 0% 100%
+        sudo partprobe "$DATA_DISK_LUN0" 2>/dev/null || true
         for _ in 1 2 3 4 5; do
-            [ -e /dev/sdc1 ] && break
+            [ -e "${DATA_DISK_LUN0}-part1" ] && break
             sleep 1
         done
-        sudo mkfs.ext4 -F /dev/sdc1
+        sudo mkfs.ext4 -F "${DATA_DISK_LUN0}-part1"
     fi
-    sudo mount /dev/sdc1 __MOUNT__
+    sudo mount "${DATA_DISK_LUN0}-part1" __MOUNT__
     sudo chmod 777 __MOUNT__
 fi
 
