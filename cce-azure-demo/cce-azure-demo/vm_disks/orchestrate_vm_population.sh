@@ -86,13 +86,33 @@ cat > /opt/cce-demo/vm_disks/generate_vm_data.py <<'SCRIPT_EOF'
 __SCRIPT_CONTENT__
 SCRIPT_EOF
 
+# Ensure the data disk is mounted before we try to fill it - if it's a
+# freshly-attached raw disk, format+mount it (idempotent: skips if already
+# mounted/formatted).
+#
+# Uses Azure's own stable, LUN-based symlink rather than a hardcoded device
+# letter (/dev/sdc etc.) - confirmed the hard way against a live fleet: which
+# letter maps to "the data disk" vs. the VM's local/ephemeral temp disk
+# SHIFTS depending on VM size (some sizes have a temp disk occupying a slot,
+# some don't). A hardcoded letter silently formatted and filled the wrong
+# (ephemeral, non-persistent) disk on several VMs in this exact deployment.
+# The data disk is attached at LUN 0 by default (single --data-disk-sizes-gb,
+# no explicit --data-disk-luns) - Azure's udev rules guarantee
+# /dev/disk/azure/scsi1/lun0 always points at LUN 0's real device, whatever
+# letter that happens to be on this particular VM.
 DATA_DISK_LUN0=/dev/disk/azure/scsi1/lun0
 CORRECT_DEVICE="${DATA_DISK_LUN0}-part1"
 
+# A previous run (before this LUN-based fix existed) may have already
+# mounted the WRONG device at __MOUNT__ - e.g. the VM's ephemeral temp
+# disk, formatted and mounted under the old hardcoded-/dev/sdc logic.
+# "already mounted, skip" isn't safe by itself: it has to actually be the
+# right device, or every later run just keeps using the wrong one forever.
+# Confirmed this exact failure mode against a live fleet.
 if mountpoint -q __MOUNT__; then
     CURRENT_SOURCE="$(findmnt -n -o SOURCE --target __MOUNT__ 2>/dev/null || true)"
     RESOLVED_CORRECT="$(readlink -f "$CORRECT_DEVICE" 2>/dev/null || true)"
-        if [ "$CURRENT_SOURCE" != "$RESOLVED_CORRECT" ]; then
+    if [ "$CURRENT_SOURCE" != "$RESOLVED_CORRECT" ]; then
         echo "WARNING: __MOUNT__ is mounted from $CURRENT_SOURCE, not the real data disk ($RESOLVED_CORRECT) - unmounting the wrong device"
         sudo umount __MOUNT__
     fi
@@ -102,14 +122,33 @@ if ! mountpoint -q __MOUNT__; then
     sudo mkdir -p __MOUNT__
     if ! blkid "$CORRECT_DEVICE" >/dev/null 2>&1; then
         sudo parted "$DATA_DISK_LUN0" --script mklabel gpt mkpart primary ext4 0% 100%
-        sudo partprobe "$DATA_DISK_LUN0" 2>/dev/null || true
-        for _ in 1 2 3 4 5; do
+        # parted returns before the kernel has necessarily registered the new
+        # partition device node - mkfs.ext4 immediately after can fail with
+        # "file does not exist" as a result. A single partprobe + 5s wait
+        # wasn't always enough against a live fleet - one VM's partition
+        # still hadn't appeared after 5s. Re-running partprobe on every
+        # iteration (not just once up front) and extending to 20s gives it
+        # more chances to actually register under load.
+        for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
             [ -e "$CORRECT_DEVICE" ] && break
+            sudo partprobe "$DATA_DISK_LUN0" 2>/dev/null || true
             sleep 1
         done
         sudo mkfs.ext4 -F "$CORRECT_DEVICE"
     fi
-    sudo mount "$CORRECT_DEVICE" __MOUNT__
+    # blkid finding a filesystem signature doesn't guarantee it's intact -
+    # confirmed against a live fleet: a device reformatted/half-written
+    # across several earlier broken attempts left a stale signature that
+    # blkid still detects, but mount then fails ("wrong fs type, bad
+    # superblock"). If that happens, force a fresh reformat and retry once
+    # rather than just giving up - this data is disposable test data, not
+    # anything worth trying to preserve through a corrupted filesystem.
+    if ! sudo mount "$CORRECT_DEVICE" __MOUNT__ 2>/tmp/mount_attempt.log; then
+        echo "WARNING: mount failed against a device blkid thought was already formatted - forcing a fresh reformat and retrying once"
+        cat /tmp/mount_attempt.log
+        sudo mkfs.ext4 -F "$CORRECT_DEVICE"
+        sudo mount "$CORRECT_DEVICE" __MOUNT__
+    fi
     sudo chmod 777 __MOUNT__
 fi
 
