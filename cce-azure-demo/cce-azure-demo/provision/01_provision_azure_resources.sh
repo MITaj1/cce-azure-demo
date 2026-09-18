@@ -49,16 +49,15 @@ declare -A VM_DOMAINS=(
 declare -A VM_SIZES=(
     ["vm-core-banking-01"]="Standard_B2ms"
     ["vm-payments-hub-01"]="Standard_B2ms"
-    ["vm-cards-processing-01"]="Standard_B2ms"
-    ["vm-aml-compliance-01"]="Standard_B2ms"
-    ["vm-data-warehouse-01"]="Standard_B2ms"
-    ["vm-risk-analytics-01"]="Standard_B2s"
-    ["vm-wealth-management-01"]="Standard_B2s"
-    ["vm-mobile-banking-01"]="Standard_B2s"
+    ["vm-cards-processing-01"]="Standard_D2_v3"
+    ["vm-aml-compliance-01"]="Standard_D2_v3"
+    ["vm-data-warehouse-01"]="Standard_D2_v3"
+    ["vm-risk-analytics-01"]="Standard_D2_v3"
+    ["vm-wealth-management-01"]="Standard_D2_v3"
+    ["vm-mobile-banking-01"]="Standard_E2bs_v5"
     ["vm-branch-systems-01"]="Standard_B2s"
-    ["vm-dr-replica-01"]="Standard_B2s"
+    ["vm-dr-replica-01"]="Standard_E2bs_v5"
 )
-
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
 # --- Resource group -----------------------------------------------------
