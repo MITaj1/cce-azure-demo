@@ -93,10 +93,6 @@ if ! mountpoint -q __MOUNT__; then
     sudo mkdir -p __MOUNT__
     if ! blkid /dev/sdc1 >/dev/null 2>&1; then
         sudo parted /dev/sdc --script mklabel gpt mkpart primary ext4 0% 100%
-        # parted returns before the kernel has necessarily registered the new
-        # partition device node - mkfs.ext4 on /dev/sdc1 immediately after can
-        # fail with "file does not exist" as a result. partprobe (or a settle
-        # wait) forces that registration before proceeding.
         sudo partprobe /dev/sdc 2>/dev/null || true
         for _ in 1 2 3 4 5; do
             [ -e /dev/sdc1 ] && break
