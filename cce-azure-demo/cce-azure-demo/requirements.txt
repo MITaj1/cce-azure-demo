@@ -1,0 +1,15 @@
+# Core generation (lib/ukbank_data.py, vm_disks/generate_vm_data.py)
+numpy>=1.24
+
+# Blob storage population
+azure-storage-blob>=12.19
+azure-identity>=1.15
+
+# SQL Database population
+pyodbc>=5.0
+# pyodbc also needs the Microsoft ODBC Driver 18 for SQL Server installed as
+# a SYSTEM package (not pip-installable) - see README "Setting up pyodbc"
+# section before running populate_sql_database.py.
+
+# Testing (not needed to run the scripts themselves)
+pytest>=8.0
