@@ -77,12 +77,12 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 python3 -c "import numpy" 2>/dev/null || pip3 install --quiet numpy 2>/dev/null || true
 
-mkdir -p /opt/cce-demo/lib
+mkdir -p /opt/cce-demo/lib /opt/cce-demo/vm_disks
 cat > /opt/cce-demo/lib/ukbank_data.py <<'LIB_EOF'
 __LIB_CONTENT__
 LIB_EOF
 
-cat > /opt/cce-demo/generate_vm_data.py <<'SCRIPT_EOF'
+cat > /opt/cce-demo/vm_disks/generate_vm_data.py <<'SCRIPT_EOF'
 __SCRIPT_CONTENT__
 SCRIPT_EOF
 
@@ -93,13 +93,22 @@ if ! mountpoint -q __MOUNT__; then
     sudo mkdir -p __MOUNT__
     if ! blkid /dev/sdc1 >/dev/null 2>&1; then
         sudo parted /dev/sdc --script mklabel gpt mkpart primary ext4 0% 100%
+        # parted returns before the kernel has necessarily registered the new
+        # partition device node - mkfs.ext4 on /dev/sdc1 immediately after can
+        # fail with "file does not exist" as a result. partprobe (or a settle
+        # wait) forces that registration before proceeding.
+        sudo partprobe /dev/sdc 2>/dev/null || true
+        for _ in 1 2 3 4 5; do
+            [ -e /dev/sdc1 ] && break
+            sleep 1
+        done
         sudo mkfs.ext4 -F /dev/sdc1
     fi
     sudo mount /dev/sdc1 __MOUNT__
     sudo chmod 777 __MOUNT__
 fi
 
-python3 /opt/cce-demo/generate_vm_data.py --mount __MOUNT__ --domain __DOMAIN__ --target-gb __TARGET_GB__
+python3 /opt/cce-demo/vm_disks/generate_vm_data.py --mount __MOUNT__ --domain __DOMAIN__ --target-gb __TARGET_GB__
 REMOTE_EOF
 )
     remote_script="${remote_script/__LIB_CONTENT__/$(cat "$LIB_LOCAL_PATH")}"
